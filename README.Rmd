@@ -1,0 +1,302 @@
+---
+title: "Vapome (re)analysis"
+author: "Birol Cabukusta"
+date: "2026-07-29"
+output: github_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, warning = F)
+```
+
+## Vapome
+
+Published as "Human VAPome Analysis Reveals MOSPD1 and MOSPD3 as Membrane Contact Site Proteins Interacting with FFAT-Related FFNT Motifs"
+
+**Please cite:** Cabukusta et al. 2020 Cell Rep. https://www.cell.com/cell-reports/fulltext/S2211-1247(20)31464-9
+
+This reanalysis of the Vapome project published in 2020, and might lead to different figures than the original publication. The reanalysis is meant to ensure that data remains open and accessible (i.e. FAIR). Not in a dust-collecting hard drive.
+
+```{r load libraries}
+library(readxl)
+library(ggplot2)
+library(dplyr)
+library(ggthemes)
+library(ggrepel)
+library(gridExtra)
+library(limma)
+library(tibble)
+library(reshape2)
+library(stringr)
+#library(rbioapi)
+```
+
+
+```{R load data}
+vapome1 = read_xlsx('data/P1133-4 recalc VAP binding partners.xlsx')
+#View(vapome1)
+
+
+
+```
+```{R}
+get_p <- function(x, y) {
+  x <- x[!is.na(x)]
+  y <- y[!is.na(y)]
+  
+  if (length(x) < 2 || length(y) < 2) {
+    return(NA_real_)
+  }
+  
+  tryCatch(
+    t.test(x, y)$p.value,
+    error = function(e) NA_real_
+  )
+}
+
+```
+
+```{R inspect data}
+vapome2 = vapome1 %>% 
+   select(c(4,5, 64:84)) %>% 
+   mutate(GeneName = str_match(string = Description, pattern = 'GN=(.*) P')[,2]) %>% 
+   select(1,24,3:23)
+
+
+vapome2 %>% 
+   filter(duplicated(GeneName)) %>% nrow
+
+vapome3 = vapome2 %>% 
+   select(-Accession) %>% 
+   group_by(GeneName) %>% 
+   summarise(across(1:21, ~ sum(.x, na.rm = TRUE)), .groups = "drop") 
+
+nrow(vapome3) - nrow(vapome2)
+
+Colnames2 = c('GeneName','Unt1','Unt2','Unt3','Bir1','Bir2','Bir3',
+  'A1','A2','A3','M11','M12','M13','M21','M22','M23',
+  'M31','M32','M33','B1','B2','B3')
+
+colnames(vapome3) <- Colnames2
+
+
+```
+
+
+
+#### Volcano plots
+```{R VAPA}
+#Filter proteins with insufficient measurements
+keep <- rowSums(!is.na(vapome3[c("A1", "A2", "A3")])) == 3 |
+        rowSums(!is.na(vapome3[c("Bir1", "Bir2", "Bir3")])) == 3
+
+vapome3_filtered <- vapome3[c(keep),]
+vapome3_filtered[2:22] <- lapply(
+  vapome3_filtered[2:22],
+  log2
+)
+
+vapome3_vapa = vapome3_filtered %>% 
+   group_by(GeneName) %>% 
+   summarise(FC = mean(c(A1, A2, A3), na.rm = T) - mean(c(Bir1, Bir2, Bir3), na.rm = T),
+             p_value = get_p(
+                c(A1, A2, A3),
+                c(Bir1, Bir2, Bir3)
+             ),
+             
+             .groups = "drop"
+   ) %>%
+   mutate(
+      adjusted_p_value = p.adjust(p_value, method = "BH")
+   )
+
+
+vapome3_vapa %>% 
+   ggplot(aes(FC, -log10(p_value))) +
+   #geom_rect(xmin = Xmin, xmax = Xmax, ymin = Ymin, ymax = Ymax, fill = "pink", alpha = 0.1) +
+   geom_point(shape = 21, color = 'black', fill = '#1a75ff') +
+   theme_base(12) +
+   geom_text_repel(data = vapome3_vapa %>% filter(FC>1 & log10(p_value) < -1),
+      aes(label = GeneName)) +
+   theme(aspect.ratio = 0.5,legend.position = 'none') +
+   #xlab("Fold Change (log2[TM/C1 mutant])") +
+   #ylab("P-value (-log10)") +
+   ggtitle('VAPA v BirA')  
+
+
+```
+
+```{R VAPB}
+#Filter proteins with insufficient measurements
+keep <- rowSums(!is.na(vapome3[c("B1", "B2", "B3")])) == 3 |
+        rowSums(!is.na(vapome3[c("Bir1", "Bir2", "Bir3")])) == 3
+
+vapome3_filtered <- vapome3[c(keep),]
+vapome3_filtered[2:22] <- lapply(
+  vapome3_filtered[2:22],
+  log2
+)
+
+vapome3_vapb = vapome3_filtered %>% 
+   group_by(GeneName) %>% 
+   summarise(FC = mean(c(B1, B2, B3), na.rm = T) - mean(c(Bir1, Bir2, Bir3), na.rm = T),
+             p_value = get_p(c(B1, B2, B3), c(Bir1, Bir2, Bir3)),
+             .groups = "drop") %>%
+   mutate(adjusted_p_value = p.adjust(p_value, method = "BH"))
+
+
+vapome3_vapb %>% 
+   ggplot(aes(FC, -log10(p_value))) +
+   #geom_rect(xmin = Xmin, xmax = Xmax, ymin = Ymin, ymax = Ymax, fill = "pink", alpha = 0.1) +
+   geom_point(shape = 21, color = 'black', fill = '#1a75ff') +
+   theme_base(12) +
+   geom_text_repel(data = vapome3_vapb %>% filter(FC>1 & log10(p_value) < -1),
+      aes(label = GeneName)) +
+   theme(aspect.ratio = 0.5,legend.position = 'none') +
+   #xlab("Fold Change (log2[TM/C1 mutant])") +
+   #ylab("P-value (-log10)") +
+   ggtitle('VAPB v BirA')  
+
+
+```
+
+```{R MOSPD1}
+#Filter proteins with insufficient measurements
+keep <- rowSums(!is.na(vapome3[c("M11", "M12", "M13")])) == 3 |
+        rowSums(!is.na(vapome3[c("Bir1", "Bir2", "Bir3")])) == 3
+
+vapome3_filtered <- vapome3[c(keep),]
+vapome3_filtered[2:22] <- lapply(
+  vapome3_filtered[2:22],
+  log2
+)
+
+vapome3_ms1 = vapome3_filtered %>% 
+   group_by(GeneName) %>% 
+   summarise(FC = mean(c(M11, M12, M13), na.rm = T) - mean(c(Bir1, Bir2, Bir3), na.rm = T),
+             p_value = get_p(c(M11, M12, M13), c(Bir1, Bir2, Bir3)),
+             .groups = "drop") %>%
+   mutate(adjusted_p_value = p.adjust(p_value, method = "BH"))
+
+
+vapome3_ms1 %>% 
+   ggplot(aes(FC, -log10(p_value))) +
+   #geom_rect(xmin = Xmin, xmax = Xmax, ymin = Ymin, ymax = Ymax, fill = "pink", alpha = 0.1) +
+   geom_point(shape = 21, color = 'black', fill = '#1a75ff') +
+   theme_base(12) +
+   geom_text_repel(data = vapome3_ms1 %>% filter(FC>1 & log10(p_value) < -1),
+      aes(label = GeneName)) +
+   theme(aspect.ratio = 0.5,legend.position = 'none') +
+   #xlab("Fold Change (log2[TM/C1 mutant])") +
+   #ylab("P-value (-log10)") +
+   ggtitle('MOSPD1 v BirA')  
+
+
+```
+
+
+```{R MOSPD2}
+#Filter proteins with insufficient measurements
+keep <- rowSums(!is.na(vapome3[c("M21", "M22", "M23")])) == 3 |
+        rowSums(!is.na(vapome3[c("Bir1", "Bir2", "Bir3")])) == 3
+
+vapome3_filtered <- vapome3[c(keep),]
+vapome3_filtered[2:22] <- lapply(
+  vapome3_filtered[2:22],
+  log2
+)
+
+vapome3_ms2 = vapome3_filtered %>% 
+   group_by(GeneName) %>% 
+   summarise(FC = mean(c(M21, M22, M23), na.rm = T) - mean(c(Bir1, Bir2, Bir3), na.rm = T),
+             p_value = get_p(c(M21, M22, M23), c(Bir1, Bir2, Bir3)),
+             .groups = "drop") %>%
+   mutate(adjusted_p_value = p.adjust(p_value, method = "BH"))
+
+
+vapome3_ms2 %>% 
+   ggplot(aes(FC, -log10(p_value))) +
+   #geom_rect(xmin = Xmin, xmax = Xmax, ymin = Ymin, ymax = Ymax, fill = "pink", alpha = 0.1) +
+   geom_point(shape = 21, color = 'black', fill = '#1a75ff') +
+   theme_base(12) +
+   geom_text_repel(data = vapome3_ms2 %>% filter(FC>1 & log10(p_value) < -1),
+      aes(label = GeneName)) +
+   theme(aspect.ratio = 0.5,legend.position = 'none') +
+   #xlab("Fold Change (log2[TM/C1 mutant])") +
+   #ylab("P-value (-log10)") +
+   ggtitle('MOSPD2 v BirA')  
+
+
+```
+
+```{R MOSPD3}
+#Filter proteins with insufficient measurements
+keep <- rowSums(!is.na(vapome3[c("M31", "M32", "M33")])) == 3 |
+        rowSums(!is.na(vapome3[c("Bir1", "Bir2", "Bir3")])) == 3
+
+vapome3_filtered <- vapome3[c(keep),]
+vapome3_filtered[2:22] <- lapply(
+  vapome3_filtered[2:22],
+  log2
+)
+
+vapome3_ms3 = vapome3_filtered %>% 
+   group_by(GeneName) %>% 
+   summarise(FC = mean(c(M31, M32, M33), na.rm = T) - mean(c(Bir1, Bir2, Bir3), na.rm = T),
+             p_value = get_p(c(M31, M32, M33), c(Bir1, Bir2, Bir3)),
+             .groups = "drop") %>%
+   mutate(adjusted_p_value = p.adjust(p_value, method = "BH"))
+
+
+vapome3_ms3 %>% 
+   ggplot(aes(FC, -log10(p_value))) +
+   #geom_rect(xmin = Xmin, xmax = Xmax, ymin = Ymin, ymax = Ymax, fill = "pink", alpha = 0.1) +
+   geom_point(shape = 21, color = 'black', fill = '#1a75ff') +
+   theme_base(12) +
+   geom_text_repel(data = vapome3_ms3 %>% filter(FC>1 & log10(p_value) < -1),
+      aes(label = GeneName)) +
+   theme(aspect.ratio = 0.5,legend.position = 'none') +
+   #xlab("Fold Change (log2[TM/C1 mutant])") +
+   #ylab("P-value (-log10)") +
+   ggtitle('MOSPD3 v BirA')  
+
+
+```
+
+#### Comparison of all proteins
+```{R start merging, fig.height = 12}
+merged_FC = rbind(
+vapome3_vapa %>% filter(FC > 0) %>% mutate(Bait = "VAPA"),
+vapome3_vapb %>% filter(FC > 0) %>% mutate(Bait = "VAPB"),
+vapome3_ms1 %>% filter(FC > 0) %>% mutate(Bait = "MOSPD1"),
+vapome3_ms2 %>% filter(FC > 0) %>% mutate(Bait = "MOSPD2"),
+vapome3_ms3 %>% filter(FC > 0) %>% mutate(Bait = "MOSPD3")
+)
+
+merged_FC2 = merged_FC %>% 
+   filter(FC > 1 & p_value< 0.2) 
+
+merged_FC2$Bait = factor(merged_FC2$Bait, levels = c("VAPA", "VAPB", "MOSPD1","MOSPD2", "MOSPD3"))
+
+merged_FC2 %>% 
+   ggplot(aes(Bait, GeneName)) +
+   geom_point(aes(size = FC)) +
+   theme_base(base_size = 12) +
+   theme(aspect.ratio = 3,
+         )
+
+   
+
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+#### Git update
+git config http.postBuffer 524288000
+git pull & git push
+git commit -m "Update files"
+git pull & git push
+
