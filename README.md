@@ -1,3 +1,11 @@
+> **Published work** \
+> This repository contains the code and materials associated with: 
+> **“Human VAPome Analysis Reveals MOSPD1 and MOSPD3 as Membrane Contact Site Proteins Interacting with FFAT-Related FFNT Motif”** 
+> [Cabukusta et al. 2020](https://pubmed.ncbi.nlm.nih.gov/33296653/)
+> 
+> All the data is available in the "data/" directory.
+> If you use this work, please cite the publication above. 
+
 Vapome (re)analysis
 ================
 Birol Cabukusta
