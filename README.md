@@ -6,6 +6,9 @@
 > All the data is available in the "data/" directory.
 > If you use this work, please cite the publication above. 
 
+For FFAT motif calculator check [Google Colab](https://colab.research.google.com/github/birolcabukusta/Tools/blob/main/FFAT_score_calculate.ipynb)
+
+
 Vapome (re)analysis
 ================
 Birol Cabukusta
